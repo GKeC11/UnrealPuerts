@@ -95,11 +95,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\Workspace\\WKG\\Plugins\\Puerts\\Source\\CSharpParamDefaultValueMetas\\CSharpParamDefaultValueMetas.ubtplugin.csproj",
+      "projectUniqueName": "D:\\Workspace\\NoOutsiders\\Plugins\\Puerts\\Source\\CSharpParamDefaultValueMetas\\CSharpParamDefaultValueMetas.ubtplugin.csproj",
       "projectName": "CSharpParamDefaultValueMetas",
-      "projectPath": "D:\\Workspace\\WKG\\Plugins\\Puerts\\Source\\CSharpParamDefaultValueMetas\\CSharpParamDefaultValueMetas.ubtplugin.csproj",
+      "projectPath": "D:\\Workspace\\NoOutsiders\\Plugins\\Puerts\\Source\\CSharpParamDefaultValueMetas\\CSharpParamDefaultValueMetas.ubtplugin.csproj",
       "packagesPath": "C:\\Users\\PC\\.nuget\\packages\\",
-      "outputPath": "D:\\Workspace\\WKG\\Plugins\\Puerts\\Source\\CSharpParamDefaultValueMetas\\obj\\",
+      "outputPath": "D:\\Workspace\\NoOutsiders\\Plugins\\Puerts\\Source\\CSharpParamDefaultValueMetas\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\PC\\AppData\\Roaming\\NuGet\\NuGet.Config",
