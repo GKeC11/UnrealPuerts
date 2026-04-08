@@ -127,7 +127,7 @@ declare module "ue" {
 
     function NewObject(Cls: Class, Outer?: Object, Name?:string, ObjectFlags?: number, JsTakeRef?: boolean): Object;
     
-    function NewStruct(St: ScriptStruct, Ptr?: bigint): object;
+    function NewStruct(St: ScriptStruct): object;
 
     function FNameLiteral(str:string):string;
     

@@ -1,36 +1,25 @@
-# Puerts 路径别名配置指南
+﻿# Puerts TypeScript 接入与调试指南
 
-本项目在 Puerts 环境下，依赖 `ts-patch` 和 `typescript-transform-paths` 两个库来实现相对路径/别名导入（Alias Import）的功能。
+本文档基于当前仓库的实际配置整理，目标是说明 4 件事：
 
-## ⚠️ TypeScript 版本要求
+- 如何初始化 Puerts TypeScript 环境
+- 如何正确编译和 watch TypeScript
+- 如何在 VS Code 中附加调试 Unreal Editor 里的 TS 代码
+- 如何注册和维护 Blueprint Mixin
 
-**必须使用 TypeScript `5.3.x`（推荐 `~5.3.3`），不可使用 5.4 及以上版本。**
+## 1. 版本要求
 
-从 TypeScript 5.4 开始，`import * as X from "module"` 语法在 CommonJS 模式下会生成 `__importStar` 辅助函数来包装 `require()` 的结果。该辅助函数会通过 `Object.getOwnPropertyNames` 枚举模块属性并创建代理对象，但 PuerTS 的 `ue` 等原生 C++ 模块的属性是通过 native binding 延迟解析的，无法被正常枚举，最终导致：
+当前项目要求使用 TypeScript `5.3.x`，建议锁定为 `~5.3.3`。
 
-- `UE.XXXClass` 变为 `undefined`
-- 继承时抛出 `TypeError: Class extends value undefined is not a constructor or null`
+原因是从 TypeScript `5.4` 开始，`CommonJS` 下的 `import * as X from "module"` 生成逻辑发生变化，会对 `require()` 结果包一层 `__importStar`。Puerts 的 `ue` 模块依赖 native binding 延迟解析属性，这种包装会导致以下问题：
 
-```jsonc
-// package.json 中锁定版本
-{
-  "dependencies": {
-    "typescript": "~5.3.3"
-  }
-}
-```
+- `UE.XXX` 变成 `undefined`
+- 蓝图类继承时报错：`TypeError: Class extends value undefined is not a constructor or null`
 
-当前项目最终使用的根目录 `package.json` 如下：
+当前项目根目录 [package.json](/d:/Workspace/NoOutsiders/package.json) 的关键配置如下：
 
 ```json
 {
-    "name": "nooutsiders-ts",
-    "private": true,
-    "scripts": {
-        "postinstall": "ts-patch install -s",
-        "build": "tspc -p tsconfig.json",
-        "watch": "tspc --watch -p tsconfig.json"
-    },
     "dependencies": {
         "typescript": "~5.3.3"
     },
@@ -41,60 +30,29 @@
 }
 ```
 
-## `tsconfig.json` 配置示例
+## 2. 初始化项目
 
-为了让路径别名正常工作，并在编译后正确替换输出的路径，请在项目根目录的 `tsconfig.json` 中添加如下配置：
+首次接入或重新整理 Puerts TypeScript 环境时，在项目根目录执行：
 
-```json
-{
-    "compilerOptions": {
-        "target": "esnext",
-        "module": "commonjs",
-        "moduleResolution": "node",
-        "noImplicitAny": false,
-        "noImplicitOverride": true,
-        "noImplicitReturns": true,
-        "strictBindCallApply": true,
-        "noImplicitThis": true,
-        "allowJs": true,
-        "checkJs": false,
-        "skipLibCheck": true,
-        "resolveJsonModule": true,
-        "forceConsistentCasingInFileNames": false,
-        "experimentalDecorators": true,
-        "emitDecoratorMetadata": true,
-        "sourceMap": true,
-        "baseUrl": ".",
-        "typeRoots": [
-            "Typing",
-            "./node_modules/@types"
-        ],
-        "outDir": "Content/JavaScript",
-        "rootDir": "./",
-        "paths": {
-            "@root/*": [
-                "./TypeScript/*"
-            ]
-        },
-        "plugins": [
-            // 编译时转换输出内容中的路径 (作用于 .js 文件)
-            {
-                "transform": "typescript-transform-paths"
-            },
-            // 如果你需要输出类型声明文件 (.d.ts)，请加上下面的配置
-            {
-                "transform": "typescript-transform-paths",
-                "afterDeclarations": true
-            }
-        ]
-    },
-    "include": [
-        "TypeScript/**/*"
-    ]
-}
+```powershell
+node Plugins/Puerts/enable_puerts_module.js
 ```
 
-当前项目实际使用的根目录 `tsconfig.json`：
+这个脚本会做几件事：
+
+- 初始化 `Content/JavaScript`
+- 在缺失时生成 `tsconfig.json`
+- 在缺失时生成 `Config/DefaultPuerts.ini`
+- 在缺失时创建 `TypeScript/`
+- 在缺失时为 `PuertsEditor` 执行一次 `npm install`
+
+如果项目里已经有自己的 `tsconfig.json`，脚本会提示文件已存在，不会强行覆盖。
+
+## 3. TypeScript 编译配置
+
+当前项目使用 `ts-patch` + `typescript-transform-paths` 来支持路径别名，并在输出 JS 时把别名改写成真实相对路径。
+
+根目录 [tsconfig.json](/d:/Workspace/NoOutsiders/tsconfig.json) 的关键配置如下：
 
 ```json
 {
@@ -102,18 +60,6 @@
         "target": "esnext",
         "module": "commonjs",
         "moduleResolution": "node",
-        "noImplicitAny": false,
-        "noImplicitOverride": true,
-        "noImplicitReturns": true,
-        "strictBindCallApply": true,
-        "noImplicitThis": true,
-        "allowJs": true,
-        "checkJs": false,
-        "skipLibCheck": true,
-        "resolveJsonModule": true,
-        "forceConsistentCasingInFileNames": false,
-        "experimentalDecorators": true,
-        "emitDecoratorMetadata": true,
         "sourceMap": true,
         "baseUrl": ".",
         "typeRoots": [
@@ -143,33 +89,35 @@
 }
 ```
 
-## VSCode Tasks 配置示例
+注意：
 
-VSCode 还需要配置 Task，用于监视 ts 文件的自动编译，以下是 Task 示例：
+- 必须通过 `tspc` 编译，不能直接用 `tsc`
+- `sourceMap` 必须保持开启，否则 TS 断点无法回映到源码
+- 输出目录是 `Content/JavaScript`
 
-> **注意：** 必须使用 `tspc`（ts-patch 编译器）而不是 `tsc`。`tsc` 不会加载 `plugins` 中配置的 `typescript-transform-paths` 插件，`@root/*` 路径别名将不会被转换为相对路径。
+## 4. 常用命令
 
-```json
-{
-    // See https://go.microsoft.com/fwlink/?LinkId=733558
-    // for the documentation about the tasks.json format
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "ts-patch watch - project",
-            "type": "shell",
-            "command": "npx tspc --watch",
-            "group": "build",
-            "problemMatcher": [
-                "$tsc-watch"
-            ],
-            "detail": "ts-patch build whole project"
-        }
-    ]
-}
+安装依赖：
+
+```powershell
+npm install
 ```
 
-当前项目使用的 `.vscode/tasks.json`：
+完整构建：
+
+```powershell
+npm run build
+```
+
+持续监听：
+
+```powershell
+npm run watch
+```
+
+## 5. VS Code Tasks
+
+当前仓库已经有 [tasks.json](/d:/Workspace/NoOutsiders/.vscode/tasks.json)：
 
 ```json
 {
@@ -196,102 +144,70 @@ VSCode 还需要配置 Task，用于监视 ts 文件的自动编译，以下是 
 }
 ```
 
-## 当前项目落地步骤
+日常开发建议先启动这个 watch task，再进入编辑器验证脚本行为。
 
-1. 首次配置 TS 环境时，先在项目根目录执行一次 `node Plugins/Puerts/enable_puerts_module.js`。
-2. 在项目根目录创建或调整 `package.json`、`tsconfig.json` 和 `.vscode/tasks.json`。
-3. 执行 `npm install`，让 `postinstall` 自动运行 `ts-patch install -s`。
-4. 执行 `npm run build` 验证一次完整编译。
-5. 日常开发时运行 `npm run watch`，或者在 VS Code 中执行 `ts-patch watch - project`。
+## 6. VS Code 调试配置
 
-### 为什么要先运行 `enable_puerts_module.js`
+当前项目已补充 [launch.json](/d:/Workspace/NoOutsiders/.vscode/launch.json)，用于附加 Unreal Editor 中的 Puerts 调试端口。
 
-这个脚本建议在项目第一次接入 Puerts TypeScript 环境时执行一次：
+默认调试端口来自 `UPuertsSetting::DebugPort`，默认值是 `8080`，定义见 [PuertsSetting.h](/d:/Workspace/NoOutsiders/Plugins/Puerts/Source/Puerts/Private/PuertsSetting.h#L33)。
 
-- 会把 `Plugins/Puerts/Content/JavaScript` 复制到项目根目录 `Content/JavaScript`
-- 会在缺失时生成根目录 `tsconfig.json`
-- 会在缺失时生成 `Config/DefaultPuerts.ini`
-- 会在缺失时创建根目录 `TypeScript` 文件夹
-- 会在缺失时为 `PuertsEditor` 执行一次 `npm install`
+### 6.1 调试前提
 
-命令示例：
+需要满足以下条件：
 
-```powershell
-node Plugins/Puerts/enable_puerts_module.js
+- `tsconfig.json` 开启了 `sourceMap`
+- Unreal Editor 中启用了 Puerts 调试
+- 编辑器实际使用的端口与 `launch.json` 保持一致
+
+如果你通过配置文件开启调试，可以在 `Config/DefaultPuerts.ini` 中补充：
+
+```ini
+[/Script/Puerts.PuertsSetting]
+AutoModeEnable=True
+DebugEnable=True
+DebugPort=8080
+WaitDebugger=False
 ```
 
-如果项目已经有自己维护过的 `tsconfig.json`，脚本会提示该文件已存在，此时保留项目当前配置即可，不需要强行覆盖。
+### 6.2 启动方式
 
-## 常见问题
+1. 运行 `npm run build` 或开启 `ts-patch watch - project`
+2. 启动 Unreal Editor
+3. 确认 Puerts 调试端口已开启，默认是 `8080`
+4. 在 VS Code 里运行 `Attach Unreal Editor`
 
-### 1. `@root` 大小写要统一
+### 6.3 多进程端口说明
 
-`tsconfig.json` 中配置的是 `@root/*`，所以代码里也必须统一写成：
+Puerts 在多进程场景下会基于默认端口做偏移：
 
-```typescript
-import { PuertsUtil } from "@root/Framework/Util/PuertsUtil";
-```
+- Server 进程：`8080 -> 9079`
+- Client 进程：`8080 -> 8090`、`8100`、`8110` ...
 
-不要写成 `@Root`，否则编译阶段会出现模块找不到的错误。
+如果你不是连主编辑器进程，需要把 `launch.json` 里的端口改成对应值，或者新增多个 attach 配置。
 
-### 2. 蓝图类型路径要以 `Typing/ue/ue_bp.d.ts` 为准
+## 7. Blueprint Mixin 开发流程
 
-蓝图生成的 TypeScript 命名空间不一定和资源目录的直觉路径完全一致，实际开发时应先去 `Typing/ue/ue_bp.d.ts` 查真实命名空间。
+### 7.1 编写 Mixin
 
-例如当前项目里的 `WBP_Lobby` 和 `WBP_LobbyPlayerItem`，正确写法是：
-
-```typescript
-const TS_TargetClass = PuertsUtil.LoadClass(UE.Game.NoOutsiders.UI.Lobby.WBP_Lobby.WBP_Lobby_C);
-interface LobbyView extends UE.Game.NoOutsiders.UI.Lobby.WBP_Lobby.WBP_Lobby_C { }
-```
-
-而不是：
-
-```typescript
-UE.Game.Game.UMG.Lobby.WBP_Lobby.WBP_Lobby_C
-```
-
-### 3. `ts-patch` 缓存异常时的处理
-
-如果遇到类似下面的问题：
-
-- `Could not acquire lock to write file`
-- `Cannot find backup cache file for tsc.js`
-
-可以按下面顺序处理：
-
-1. 执行 `npx ts-patch clear-cache`
-2. 执行 `npx ts-patch install -s`
-3. 如果还是不行，删除根目录 `node_modules` 后重新执行 `npm install`
-
-## 蓝图 Mixin 开发流程
-
-### 1. 编写 Mixin 模板
-
-当你需要为蓝图编写 TypeScript 逻辑时，可以参考以下 Mixin 模板（以 `LobbyView` 为例）：
+以 `LobbyView` 为例：
 
 ```typescript
 import * as UE from "ue";
 import { PuertsUtil } from "@root/Framework/Util/PuertsUtil";
 
-// 1. 加载目标蓝图类的 Class 对象
 const TS_TargetClass = PuertsUtil.LoadClass(UE.Game.NoOutsiders.UI.Lobby.WBP_Lobby.WBP_Lobby_C);
-
-// 2. 声明 Mixin 接口并继承蓝图类，保留完整代码提示（IntelliSense）
 interface LobbyView extends UE.Game.NoOutsiders.UI.Lobby.WBP_Lobby.WBP_Lobby_C { }
 
-// 3. 实现自定义的 Mixin 逻辑类
 class LobbyView {
-
 }
 
-// 4. 将 TS 类的方法注销混入到 UE 蓝图类中
 PuertsUtil.Mixin(TS_TargetClass, LobbyView);
 ```
 
-### 2. 注册 Mixin 路径
+### 7.2 注册 Mixin
 
-Mixin 代码编写完成后，需要前往 `MixinDefine.ts` 脚本中注册该 TS 文件的路径映射与分组配置，示例如下：
+Mixin 文件写完后，还需要在 [MixinDefine.ts](/d:/Workspace/NoOutsiders/TypeScript/Framework/Mixin/MixinDefine.ts) 里注册路径：
 
 ```typescript
 export const PathConfig: Map<string, string> = new Map([
@@ -299,19 +215,117 @@ export const PathConfig: Map<string, string> = new Map([
     ["@Game", "./TypeScript/Game"],
 ])
 
-type MixinGroupConfigType = {
-    [Index in number]: string[];
-}
-
-export enum MixinGroupType
-{
-    Common,
-}
-
-export const MixinGroupConfig: MixinGroupConfigType = {
+export const MixinGroupConfig = {
     [MixinGroupType.Common]: [
         "@Root/UI/LobbyView",
         "@Root/UI/LobbyPlayerItemView",
     ]
 }
 ```
+
+注意这里的 `@Root` 只是 Mixin 动态加载路径前缀，和业务代码里 `import` 使用的 `@root/*` 不是同一层概念，不要混写。
+
+### 7.3 Mixin 实例类型断言写法
+
+当你通过 `Create`、`GetWidgetFromName` 或其他方式拿到一个已经被 Mixin 过的蓝图对象时，推荐直接断言成对应的 TS Mixin 类。
+
+例如 `LobbyPlayerItemView` 的正确写法是：
+
+```typescript
+const lobbyPlayerItemWidget = playerItemWidget as LobbyPlayerItemView;
+```
+
+不推荐写成匿名结构类型：
+
+```typescript
+const lobbyPlayerItemWidget = playerItemWidget as UE.Game.NoOutsiders.UI.Lobby.WBP_LobbyPlayerItem.WBP_LobbyPlayerItem_C & {
+    SetupPlayerItem(playerName: string): void;
+};
+```
+
+原因是：
+
+- 直接断言成 `LobbyPlayerItemView` 更符合 Mixin 的实际使用方式
+- 类型更集中，后续方法补充时不需要到处重复匿名声明
+- 可读性更好，也更方便 IDE 跳转和补全
+
+前提是对应的 Mixin 文件已经正确加载并注册。
+
+## 8. 常见问题
+
+### 8.1 `@root` 大小写问题
+
+`tsconfig.json` 中配置的是 `@root/*`，所以 TypeScript 代码里的导入也必须写成：
+
+```typescript
+import { PuertsUtil } from "@root/Framework/Util/PuertsUtil";
+```
+
+不要写成 `@Root/...`，否则编译阶段会找不到模块。
+
+### 8.2 蓝图类型路径以 `Typing/ue/ue_bp.d.ts` 为准
+
+蓝图生成的 TypeScript 命名空间不一定和资源目录一一对应。写 Mixin 或访问蓝图字段时，先查 [ue_bp.d.ts](/d:/Workspace/NoOutsiders/Typing/ue/ue_bp.d.ts)。
+
+例如当前项目里 `WBP_Lobby` 的写法是：
+
+```typescript
+const TS_TargetClass = PuertsUtil.LoadClass(UE.Game.NoOutsiders.UI.Lobby.WBP_Lobby.WBP_Lobby_C);
+interface LobbyView extends UE.Game.NoOutsiders.UI.Lobby.WBP_Lobby.WBP_Lobby_C { }
+```
+
+### 8.3 `K2_SetTimer` 不能调用纯 TypeScript 方法
+
+`UE.KismetSystemLibrary.K2_SetTimer(Object, "FunctionName", ...)` 底层是按 `UFunction` 名称查找并调用函数，所以它只适用于：
+
+- C++ `UFUNCTION`
+- 蓝图函数
+
+它不适用于纯 TypeScript Mixin 方法。比如下面这种写法就是无效的：
+
+```typescript
+UE.KismetSystemLibrary.K2_SetTimer(this, "TryBindLobbyGameState", 0.1, false);
+```
+
+如果 `TryBindLobbyGameState` 只是 TS 类中的普通方法，而不是 `UFunction`，`K2_SetTimer` 不会正确调用它。
+
+这类场景应该改用 TS 自己的定时器：
+
+```typescript
+setTimeout(() => {
+    this.TryBindLobbyGameState();
+}, 100);
+```
+
+简而言之：
+
+- 需要按函数名调用 Unreal 反射函数时，用 `K2_SetTimer`
+- 需要调纯 TS 逻辑时，用 `setTimeout` / `setInterval`
+
+### 8.4 `ts-patch` 缓存异常
+
+如果遇到以下报错：
+
+- `Could not acquire lock to write file`
+- `Cannot find backup cache file for tsc.js`
+
+按下面顺序处理：
+
+```powershell
+npx ts-patch clear-cache
+npx ts-patch install -s
+```
+
+如果还不行，再删除 `node_modules` 后重新执行：
+
+```powershell
+npm install
+```
+
+## 9. 推荐工作流
+
+1. 运行 `node Plugins/Puerts/enable_puerts_module.js`
+2. 运行 `npm install`
+3. 运行 `npm run build` 做一次完整检查
+4. 启动 `ts-patch watch - project`
+5. 如需断点调试，在 VS Code 中执行 `Attach Unreal Editor`
