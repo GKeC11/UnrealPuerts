@@ -253,7 +253,52 @@ const lobbyPlayerItemWidget = playerItemWidget as UE.Game.NoOutsiders.UI.Lobby.W
 
 ## 8. 常见问题
 
-### 8.1 `@root` 大小写问题
+### 8.1 TypeScript 代码风格约束
+
+#### 8.1.1 私有成员不要使用前导下划线
+
+项目内 TypeScript 类成员统一使用普通 camelCase，不要写成前导下划线或双下划线形式。
+
+正确示例：
+
+```typescript
+private hideTimer?: ReturnType<typeof setTimeout>;
+private boundMatchGameState?: UE.NoMatchGameState;
+```
+
+不推荐示例：
+
+```typescript
+private __hideTimer?: ReturnType<typeof setTimeout>;
+private __boundMatchGameState?: UE.NoMatchGameState;
+```
+
+#### 8.1.2 Unreal 对象类型断言直接使用生成的 UE 类型
+
+拿 Unreal 对象时，优先直接断言为 `Typing/ue` 中已经生成的 UE 类型，不要额外包装一层交叉类型：
+
+正确示例：
+
+```typescript
+const gameState = UE.GameplayStatics.GetGameState(this) as UE.NoMatchGameState | undefined;
+```
+
+不推荐示例：
+
+```typescript
+type MatchGameStateWithCountdown = UE.NoMatchGameState & {
+    OnPhaseRemainingTimeChanged: UE.$MulticastDelegate<(newRemainingTime: number) => void>;
+    GetPhaseRemainingTime(): number;
+};
+```
+
+如果 C++ 新增了字段、函数或委托，但 `Typing/ue/ue.d.ts` 还没同步刷新：
+
+- 对象本身仍然先断言成对应的 UE 类型
+- 临时访问缺失成员时，可以只在成员访问这一层做局部 `any` 处理
+- 后续尽快重新生成 typing，移除临时 `any`
+
+### 8.2 `@root` 大小写问题
 
 `tsconfig.json` 中配置的是 `@root/*`，所以 TypeScript 代码里的导入也必须写成：
 
@@ -263,7 +308,7 @@ import { PuertsUtil } from "@root/Framework/Util/PuertsUtil";
 
 不要写成 `@Root/...`，否则编译阶段会找不到模块。
 
-### 8.2 蓝图类型路径以 `Typing/ue/ue_bp.d.ts` 为准
+### 8.3 蓝图类型路径以 `Typing/ue/ue_bp.d.ts` 为准
 
 蓝图生成的 TypeScript 命名空间不一定和资源目录一一对应。写 Mixin 或访问蓝图字段时，先查 [ue_bp.d.ts](/d:/Workspace/NoOutsiders/Typing/ue/ue_bp.d.ts)。
 
@@ -274,7 +319,7 @@ const TS_TargetClass = PuertsUtil.LoadClass(UE.Game.NoOutsiders.UI.Lobby.WBP_Lob
 interface LobbyView extends UE.Game.NoOutsiders.UI.Lobby.WBP_Lobby.WBP_Lobby_C { }
 ```
 
-### 8.3 `K2_SetTimer` 不能调用纯 TypeScript 方法
+### 8.4 `K2_SetTimer` 不能调用纯 TypeScript 方法
 
 `UE.KismetSystemLibrary.K2_SetTimer(Object, "FunctionName", ...)` 底层是按 `UFunction` 名称查找并调用函数，所以它只适用于：
 
@@ -302,7 +347,7 @@ setTimeout(() => {
 - 需要按函数名调用 Unreal 反射函数时，用 `K2_SetTimer`
 - 需要调纯 TS 逻辑时，用 `setTimeout` / `setInterval`
 
-### 8.4 `ts-patch` 缓存异常
+### 8.5 `ts-patch` 缓存异常
 
 如果遇到以下报错：
 
