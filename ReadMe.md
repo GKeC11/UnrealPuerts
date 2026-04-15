@@ -1,6 +1,6 @@
 ﻿# Puerts TypeScript 接入与调试指南
 
-本文档基于当前仓库的实际配置整理，目标是说明 4 件事：
+本文档目标是说明 4 件事：
 
 - 如何初始化 Puerts TypeScript 环境
 - 如何正确编译和 watch TypeScript
@@ -16,7 +16,7 @@
 - `UE.XXX` 变成 `undefined`
 - 蓝图类继承时报错：`TypeError: Class extends value undefined is not a constructor or null`
 
-当前项目根目录 [package.json](/d:/Workspace/NoOutsiders/package.json) 的关键配置如下：
+推荐的 `package.json` 关键配置如下：
 
 ```json
 {
@@ -50,9 +50,9 @@ node Plugins/Puerts/enable_puerts_module.js
 
 ## 3. TypeScript 编译配置
 
-当前项目使用 `ts-patch` + `typescript-transform-paths` 来支持路径别名，并在输出 JS 时把别名改写成真实相对路径。
+推荐使用 `ts-patch` + `typescript-transform-paths` 来支持路径别名，并在输出 JS 时把别名改写成真实相对路径。
 
-根目录 [tsconfig.json](/d:/Workspace/NoOutsiders/tsconfig.json) 的关键配置如下：
+`tsconfig.json` 的关键配置如下：
 
 ```json
 {
@@ -117,7 +117,7 @@ npm run watch
 
 ## 5. VS Code Tasks
 
-当前仓库已经有 [tasks.json](/d:/Workspace/NoOutsiders/.vscode/tasks.json)：
+推荐在 `.vscode/tasks.json` 中提供类似下面的 watch task：
 
 ```json
 {
@@ -129,7 +129,9 @@ npm run watch
             "command": "npx",
             "args": [
                 "tspc",
-                "--watch"
+                "--watch",
+                "-p",
+                "tsconfig.json"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -148,9 +150,9 @@ npm run watch
 
 ## 6. VS Code 调试配置
 
-当前项目已补充 [launch.json](/d:/Workspace/NoOutsiders/.vscode/launch.json)，用于附加 Unreal Editor 中的 Puerts 调试端口。
+可以在 `.vscode/launch.json` 中补充配置，用于附加 Unreal Editor 中的 Puerts 调试端口。
 
-默认调试端口来自 `UPuertsSetting::DebugPort`，默认值是 `8080`，定义见 [PuertsSetting.h](/d:/Workspace/NoOutsiders/Plugins/Puerts/Source/Puerts/Private/PuertsSetting.h#L33)。
+默认调试端口来自 `UPuertsSetting::DebugPort`，默认值是 `8080`。
 
 ### 6.1 调试前提
 
@@ -207,7 +209,7 @@ PuertsUtil.Mixin(TS_TargetClass, LobbyView);
 
 ### 7.2 注册 Mixin
 
-Mixin 文件写完后，还需要在 [MixinDefine.ts](/d:/Workspace/NoOutsiders/TypeScript/Framework/Mixin/MixinDefine.ts) 里注册路径：
+Mixin 文件写完后，还需要在 `MixinDefine.ts` 里注册路径：
 
 ```typescript
 export const PathConfig: Map<string, string> = new Map([
@@ -310,7 +312,7 @@ import { PuertsUtil } from "@root/Framework/Util/PuertsUtil";
 
 ### 8.3 蓝图类型路径以 `Typing/ue/ue_bp.d.ts` 为准
 
-蓝图生成的 TypeScript 命名空间不一定和资源目录一一对应。写 Mixin 或访问蓝图字段时，先查 [ue_bp.d.ts](/d:/Workspace/NoOutsiders/Typing/ue/ue_bp.d.ts)。
+蓝图生成的 TypeScript 命名空间不一定和资源目录一一对应。写 Mixin 或访问蓝图字段时，先查 `Typing/ue/ue_bp.d.ts`。
 
 例如当前项目里 `WBP_Lobby` 的写法是：
 
@@ -347,14 +349,45 @@ setTimeout(() => {
 - 需要按函数名调用 Unreal 反射函数时，用 `K2_SetTimer`
 - 需要调纯 TS 逻辑时，用 `setTimeout` / `setInterval`
 
-### 8.5 `ts-patch` 缓存异常
+### 8.5 初始化前先确认 `node` / `npm`
 
-如果遇到以下报错：
+如果在执行下面这些命令时直接报：
+
+- `node` 不是内部或外部命令
+- `npm` 不是内部或外部命令
+
+先不要继续排查 `ts-patch` 或 `tsconfig.json`，优先确认：
+
+```powershell
+node --version
+npm --version
+```
+
+如果这里就失败了，说明当前终端还没有可用的 Node.js 运行时，或者 PATH 没配好。先把 Node.js 装好并确认命令可用，再继续执行：
+
+```powershell
+node Plugins/Puerts/enable_puerts_module.js
+npm install
+```
+
+### 8.6 `ts-patch` 缓存 / 锁文件异常
+
+常见报错包括：
 
 - `Could not acquire lock to write file`
+- `EPERM: operation not permitted, unlink ... .lock`
 - `Cannot find backup cache file for tsc.js`
+- `Failed to patch tsc exec statement early return!`
 
-按下面顺序处理：
+这些问题看起来像不同报错，实际大多和 `ts-patch` 缓存状态、锁文件状态、或者 persistent patch / live compiler 状态混用有关。推荐按下面顺序处理，不要跳步：
+
+1. 先确认 `node --version`、`npm --version`
+2. 再执行 `node Plugins/Puerts/enable_puerts_module.js`
+3. 再执行 `npm install`
+4. 如果仍然报 `ts-patch` 缓存或锁文件异常，先清缓存 / 重装依赖
+5. 如果仍有 `npx` / `ts-patch` 执行问题，先补齐本机 Node.js / npm 环境，再重新执行标准命令
+
+常规处理方式：
 
 ```powershell
 npx ts-patch clear-cache
@@ -366,6 +399,19 @@ npx ts-patch install -s
 ```powershell
 npm install
 ```
+
+如果常规方式仍然会遇到执行问题，优先回到标准入口：
+
+- `npm run build`
+- `npm run watch`
+- VS Code `ts-patch watch - project`
+
+如果报错已经进入以下状态：
+
+- `Cannot find backup cache file for tsc.js`
+- `Failed to patch tsc exec statement early return!`
+
+通常说明 `typescript` 包已经进入“不干净”的 patch 状态，可能是 persistent patch 和 live compiler 混用了。这时不要继续来回执行不同形式的 `tspc` / `ts-patch install -s`，优先统一回到标准入口，再必要时重装依赖树。
 
 ## 9. 推荐工作流
 
