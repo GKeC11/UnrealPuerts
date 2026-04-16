@@ -1,0 +1,4 @@
+interface:
+  display_name: "Puerts TS"
+  short_description: "Implement and debug Puerts TypeScript"
+  default_prompt: "Use $puerts-ts to implement or debug TypeScript code for this Puerts-based Unreal project."

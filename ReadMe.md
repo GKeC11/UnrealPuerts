@@ -1,6 +1,6 @@
 ﻿# Puerts TypeScript 接入与调试指南
 
-本文档目标是说明 4 件事：
+本文档基于当前仓库的实际配置整理，目标是说明 4 件事：
 
 - 如何初始化 Puerts TypeScript 环境
 - 如何正确编译和 watch TypeScript
@@ -16,7 +16,7 @@
 - `UE.XXX` 变成 `undefined`
 - 蓝图类继承时报错：`TypeError: Class extends value undefined is not a constructor or null`
 
-推荐的 `package.json` 关键配置如下：
+当前项目根目录 [package.json](/d:/Workspace/NoOutsiders/package.json) 的关键配置如下：
 
 ```json
 {
@@ -50,9 +50,9 @@ node Plugins/Puerts/enable_puerts_module.js
 
 ## 3. TypeScript 编译配置
 
-推荐使用 `ts-patch` + `typescript-transform-paths` 来支持路径别名，并在输出 JS 时把别名改写成真实相对路径。
+当前项目使用 `ts-patch` + `typescript-transform-paths` 来支持路径别名，并在输出 JS 时把别名改写成真实相对路径。
 
-`tsconfig.json` 的关键配置如下：
+根目录 [tsconfig.json](/d:/Workspace/NoOutsiders/tsconfig.json) 的关键配置如下：
 
 ```json
 {
@@ -117,7 +117,7 @@ npm run watch
 
 ## 5. VS Code Tasks
 
-推荐在 `.vscode/tasks.json` 中提供类似下面的 watch task：
+当前仓库已经有 [tasks.json](/d:/Workspace/NoOutsiders/.vscode/tasks.json)：
 
 ```json
 {
@@ -129,9 +129,7 @@ npm run watch
             "command": "npx",
             "args": [
                 "tspc",
-                "--watch",
-                "-p",
-                "tsconfig.json"
+                "--watch"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
@@ -150,9 +148,9 @@ npm run watch
 
 ## 6. VS Code 调试配置
 
-可以在 `.vscode/launch.json` 中补充配置，用于附加 Unreal Editor 中的 Puerts 调试端口。
+当前项目已补充 [launch.json](/d:/Workspace/NoOutsiders/.vscode/launch.json)，用于附加 Unreal Editor 中的 Puerts 调试端口。
 
-默认调试端口来自 `UPuertsSetting::DebugPort`，默认值是 `8080`。
+默认调试端口来自 `UPuertsSetting::DebugPort`，默认值是 `8080`，定义见 [PuertsSetting.h](/d:/Workspace/NoOutsiders/Plugins/Puerts/Source/Puerts/Private/PuertsSetting.h#L33)。
 
 ### 6.1 调试前提
 
@@ -207,9 +205,61 @@ class LobbyView {
 PuertsUtil.Mixin(TS_TargetClass, LobbyView);
 ```
 
+项目里优先统一使用 `PuertsUtil.LoadClass(...)` 获取蓝图类，而不是直接手写 `UE.Class.Load(...)` + `blueprint.tojs(...)`。  
+默认优先写“推导出来的 UE 类型路径”，不要因为当前 `ue_bp.d.ts` 里暂时没刷出来，就主动降级成通用类型或字符串路径。先把标准写法落进代码，后续由开发者补齐 typings。
+
+常见写法：
+
+1. `ue_bp.d.ts` 里已经有生成类型时，直接传类型对象：
+
+```typescript
+const TS_TargetClass = PuertsUtil.LoadClass(UE.Game.NoOutsiders.UI.Lobby.WBP_Lobby.WBP_Lobby_C);
+```
+
+2. 如果你确认资源路径能稳定推导出类型名，但当前 typings 还没刷新，也先按推导结果直接写：
+
+```typescript
+const TS_TargetClass = PuertsUtil.LoadClass(UE.Game.NoOutsiders.UI.Vote.WBP_Vote.WBP_Vote_C);
+interface VoteView extends UE.Game.NoOutsiders.UI.Vote.WBP_Vote.WBP_Vote_C { }
+```
+
+3. 只有在确实没法合理推导 UE 命名空间，或者只是做临时验证时，才退回完整蓝图类路径字符串：
+
+```typescript
+const TS_TargetClass = PuertsUtil.LoadClass("/Game/NoOutsiders/UI/Vote/WBP_Vote.WBP_Vote_C");
+```
+
+这样可以把蓝图加载逻辑统一收口在 `PuertsUtil` 里，同时保持业务代码尽量接近最终规范。
+
+如果蓝图生成类型里已经带有控件成员，就不要在 mixin 的 `interface` 里重复声明这些字段，保持空接口即可：
+
+```typescript
+interface VoteView extends UE.Game.NoOutsiders.UI.Vote.WBP_Vote.WBP_Vote_C { }
+```
+
+另外，`Typing/ue/ue.d.ts` 里的 UE 运行时类型同样是唯一准绳。  
+如果 `UE.NOMatchGameState`、`UE.NOMatchPlayerController` 这类类型、方法、委托已经在 `ue.d.ts` 里存在，就直接使用，不要在业务代码里再手写一层匿名结构类型、交叉类型或本地 `type` 去“补定义”。
+
+推荐写法：
+
+```typescript
+const matchGameState = UE.GameplayStatics.GetGameState(this) as UE.NOMatchGameState | undefined;
+const matchPlayerController = owningPlayer as UE.NOMatchPlayerController | undefined;
+```
+
+不推荐写法：
+
+```typescript
+type MatchGameState = UE.NOMatchGameState & {
+    GetVoteBallotCounts(): number[];
+};
+```
+
+如果你发现实际 C++/蓝图已经有某个成员，但 `ue.d.ts` 里还没有，优先更新或重新生成 typings，而不是在业务 TS 里临时补一套本地类型。
+
 ### 7.2 注册 Mixin
 
-Mixin 文件写完后，还需要在 `MixinDefine.ts` 里注册路径：
+Mixin 文件写完后，还需要在 [MixinDefine.ts](/d:/Workspace/NoOutsiders/TypeScript/Framework/Mixin/MixinDefine.ts) 里注册路径：
 
 ```typescript
 export const PathConfig: Map<string, string> = new Map([
@@ -255,52 +305,24 @@ const lobbyPlayerItemWidget = playerItemWidget as UE.Game.NoOutsiders.UI.Lobby.W
 
 ## 8. 常见问题
 
-### 8.1 TypeScript 代码风格约束
+### 8.0 TypeScript 命名风格
 
-#### 8.1.1 私有成员不要使用前导下划线
+Puerts TypeScript 代码里的私有字段不要使用前导下划线命名，例如不要写 `__displayIndex`、`_timerHandle`。
 
-项目内 TypeScript 类成员统一使用普通 camelCase，不要写成前导下划线或双下划线形式。
-
-正确示例：
+统一使用普通 `camelCase`：
 
 ```typescript
-private hideTimer?: ReturnType<typeof setTimeout>;
-private boundMatchGameState?: UE.NoMatchGameState;
+private displayIndex = -1;
+private voteButtonClickedHandler?: () => void;
 ```
 
-不推荐示例：
+这样做的原因是：
 
-```typescript
-private __hideTimer?: ReturnType<typeof setTimeout>;
-private __boundMatchGameState?: UE.NoMatchGameState;
-```
+- 和当前项目里绝大多数 TypeScript 写法保持一致
+- 避免把 C++/其他语言里的私有字段习惯直接带进 TS
+- 让 Mixin/UI 脚本在阅读时更自然，减少无意义前缀噪音
 
-#### 8.1.2 Unreal 对象类型断言直接使用生成的 UE 类型
-
-拿 Unreal 对象时，优先直接断言为 `Typing/ue` 中已经生成的 UE 类型，不要额外包装一层交叉类型：
-
-正确示例：
-
-```typescript
-const gameState = UE.GameplayStatics.GetGameState(this) as UE.NoMatchGameState | undefined;
-```
-
-不推荐示例：
-
-```typescript
-type MatchGameStateWithCountdown = UE.NoMatchGameState & {
-    OnPhaseRemainingTimeChanged: UE.$MulticastDelegate<(newRemainingTime: number) => void>;
-    GetPhaseRemainingTime(): number;
-};
-```
-
-如果 C++ 新增了字段、函数或委托，但 `Typing/ue/ue.d.ts` 还没同步刷新：
-
-- 对象本身仍然先断言成对应的 UE 类型
-- 临时访问缺失成员时，可以只在成员访问这一层做局部 `any` 处理
-- 后续尽快重新生成 typing，移除临时 `any`
-
-### 8.2 `@root` 大小写问题
+### 8.1 `@root` 大小写问题
 
 `tsconfig.json` 中配置的是 `@root/*`，所以 TypeScript 代码里的导入也必须写成：
 
@@ -310,9 +332,14 @@ import { PuertsUtil } from "@root/Framework/Util/PuertsUtil";
 
 不要写成 `@Root/...`，否则编译阶段会找不到模块。
 
-### 8.3 蓝图类型路径以 `Typing/ue/ue_bp.d.ts` 为准
+### 8.2 UE 类型定义以 `Typing/ue/ue.d.ts` 和 `Typing/ue/ue_bp.d.ts` 为准
 
-蓝图生成的 TypeScript 命名空间不一定和资源目录一一对应。写 Mixin 或访问蓝图字段时，先查 `Typing/ue/ue_bp.d.ts`。
+写 Puerts TypeScript 时，先查 typings，再写业务代码：
+
+- 运行时类、方法、委托，以 [ue.d.ts](/d:/Workspace/NoOutsiders/Typing/ue/ue.d.ts) 为准
+- 蓝图生成命名空间和蓝图类路径，以 [ue_bp.d.ts](/d:/Workspace/NoOutsiders/Typing/ue/ue_bp.d.ts) 为准
+
+不要绕过 typings 在业务代码里重复造一套 UE 类型声明。
 
 例如当前项目里 `WBP_Lobby` 的写法是：
 
@@ -321,7 +348,7 @@ const TS_TargetClass = PuertsUtil.LoadClass(UE.Game.NoOutsiders.UI.Lobby.WBP_Lob
 interface LobbyView extends UE.Game.NoOutsiders.UI.Lobby.WBP_Lobby.WBP_Lobby_C { }
 ```
 
-### 8.4 `K2_SetTimer` 不能调用纯 TypeScript 方法
+### 8.3 `K2_SetTimer` 不能调用纯 TypeScript 方法
 
 `UE.KismetSystemLibrary.K2_SetTimer(Object, "FunctionName", ...)` 底层是按 `UFunction` 名称查找并调用函数，所以它只适用于：
 
@@ -349,45 +376,14 @@ setTimeout(() => {
 - 需要按函数名调用 Unreal 反射函数时，用 `K2_SetTimer`
 - 需要调纯 TS 逻辑时，用 `setTimeout` / `setInterval`
 
-### 8.5 初始化前先确认 `node` / `npm`
+### 8.4 `ts-patch` 缓存异常
 
-如果在执行下面这些命令时直接报：
-
-- `node` 不是内部或外部命令
-- `npm` 不是内部或外部命令
-
-先不要继续排查 `ts-patch` 或 `tsconfig.json`，优先确认：
-
-```powershell
-node --version
-npm --version
-```
-
-如果这里就失败了，说明当前终端还没有可用的 Node.js 运行时，或者 PATH 没配好。先把 Node.js 装好并确认命令可用，再继续执行：
-
-```powershell
-node Plugins/Puerts/enable_puerts_module.js
-npm install
-```
-
-### 8.6 `ts-patch` 缓存 / 锁文件异常
-
-常见报错包括：
+如果遇到以下报错：
 
 - `Could not acquire lock to write file`
-- `EPERM: operation not permitted, unlink ... .lock`
 - `Cannot find backup cache file for tsc.js`
-- `Failed to patch tsc exec statement early return!`
 
-这些问题看起来像不同报错，实际大多和 `ts-patch` 缓存状态、锁文件状态、或者 persistent patch / live compiler 状态混用有关。推荐按下面顺序处理，不要跳步：
-
-1. 先确认 `node --version`、`npm --version`
-2. 再执行 `node Plugins/Puerts/enable_puerts_module.js`
-3. 再执行 `npm install`
-4. 如果仍然报 `ts-patch` 缓存或锁文件异常，先清缓存 / 重装依赖
-5. 如果仍有 `npx` / `ts-patch` 执行问题，先补齐本机 Node.js / npm 环境，再重新执行标准命令
-
-常规处理方式：
+按下面顺序处理：
 
 ```powershell
 npx ts-patch clear-cache
@@ -400,19 +396,6 @@ npx ts-patch install -s
 npm install
 ```
 
-如果常规方式仍然会遇到执行问题，优先回到标准入口：
-
-- `npm run build`
-- `npm run watch`
-- VS Code `ts-patch watch - project`
-
-如果报错已经进入以下状态：
-
-- `Cannot find backup cache file for tsc.js`
-- `Failed to patch tsc exec statement early return!`
-
-通常说明 `typescript` 包已经进入“不干净”的 patch 状态，可能是 persistent patch 和 live compiler 混用了。这时不要继续来回执行不同形式的 `tspc` / `ts-patch install -s`，优先统一回到标准入口，再必要时重装依赖树。
-
 ## 9. 推荐工作流
 
 1. 运行 `node Plugins/Puerts/enable_puerts_module.js`
@@ -420,3 +403,9 @@ npm install
 3. 运行 `npm run build` 做一次完整检查
 4. 启动 `ts-patch watch - project`
 5. 如需断点调试，在 VS Code 中执行 `Attach Unreal Editor`
+
+## 10. 插件内置 Skill
+
+仓库内已经附带 Codex skill，位置在 [puerts-ts](Plugins/Puerts/.codex/skills/puerts-ts/SKILL.md)。
+
+如果你希望插件和 skill 一起分发，可以直接保留这个目录结构；把插件拷到别的项目时，连同 `.codex/skills/puerts-ts` 一起带走即可。
