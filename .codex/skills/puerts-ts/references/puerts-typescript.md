@@ -21,7 +21,9 @@ Important compiler constraints:
 
 - Do not switch to TypeScript 5.4+ casually. Puerts `ue` imports can break because of CommonJS interop wrapping.
 - Do not replace `tspc` with `tsc`.
+- Keep `module: "commonjs"` and `moduleResolution: "node"` for the current toolchain.
 - Keep `sourceMap: true` so Unreal debugging maps back to TS files.
+- The repository currently works with `strictNullChecks: false`.
 
 ## Path conventions
 
@@ -66,6 +68,13 @@ const widget = rawWidget as LobbyPlayerItemView;
 
 Avoid repeating anonymous intersection types unless there is a very specific reason.
 
+## Code-writing conventions
+
+- Repeated UE lookup helpers should be centralized in shared helpers such as `TypeScript/Library/CommonLibrary.ts` instead of being reimplemented in multiple views.
+- In this repository, a helper typed as returning a concrete UE/object type may still return `null`; callers are still expected to guard with `if (!value)` where appropriate.
+- Because `strictNullChecks` is disabled, prefer plain `return null;` over `null as unknown as SomeType` when following that convention.
+- If a UE runtime type already exists in `Typing/ue/ue.d.ts`, use it directly. Do not add local anonymous object shapes or intersection overlays just to restate existing engine APIs.
+
 ## Debugging Unreal Editor
 
 The repository already uses a VS Code attach configuration named `Attach Unreal Editor`.
@@ -81,7 +90,9 @@ Typical port values:
 
 - editor: `8080`
 - server: `9079`
-- client processes: `8090`, `8100`, `8110`, ...
+- client processes: `8090`, `8100`, `8110`, ... 
+
+If VS Code shows diagnostics that disagree with `npm run build` / `tspc`, switch VS Code to the workspace TypeScript version from `node_modules/typescript/lib`.
 
 If configuration is needed, `Config/DefaultPuerts.ini` should contain the expected debug settings.
 

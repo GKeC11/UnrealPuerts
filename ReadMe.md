@@ -61,7 +61,7 @@ node Plugins/Puerts/enable_puerts_module.js
         "module": "commonjs",
         "moduleResolution": "node",
         "sourceMap": true,
-        "baseUrl": ".",
+        "strictNullChecks": false,
         "typeRoots": [
             "Typing",
             "./node_modules/@types"
@@ -94,6 +94,8 @@ node Plugins/Puerts/enable_puerts_module.js
 - 必须通过 `tspc` 编译，不能直接用 `tsc`
 - `sourceMap` 必须保持开启，否则 TS 断点无法回映到源码
 - 输出目录是 `Content/JavaScript`
+- `moduleResolution` 不是必填项；不写时 TypeScript 会按 `module` 推导默认解析策略
+- 但当前项目使用了 `paths` 别名，实践上仍建议显式配置 `moduleResolution`，这样 IDE 和编译器行为更稳定一致
 
 ## 4. 常用命令
 
@@ -395,6 +397,128 @@ npx ts-patch install -s
 ```powershell
 npm install
 ```
+
+### 8.5 Puerts 场景下的返回类型判空约定
+
+在当前项目的 Puerts TypeScript 代码里，如果某个 UE 对象获取函数在业务上通常写成“返回具体类型”，函数签名可以不额外写 `| undefined`，调用处仍然可以继续做判空保护。
+
+例如下面这种写法是允许的：
+
+```typescript
+private GetVoteManagerComponent(): VoteManagerComponent {
+    const matchGameState = CommonLibrary.GetMatchGameState(this);
+    if (!matchGameState) {
+        return null;
+    }
+
+    const voteManager = matchGameState.GetVoteManagerComponent();
+    return voteManager as VoteManagerComponent;
+}
+```
+
+调用处依然可以正常写：
+
+```typescript
+const voteManager = this.GetVoteManagerComponent();
+if (!voteManager) {
+    return;
+}
+```
+
+这个约定的目的，是让函数签名保持简洁，判空逻辑放在实际使用点处理。  
+也就是说，在本项目里“函数返回类型不写 `| undefined`”并不妨碍调用处继续进行空值判断。
+
+### 8.6 `moduleResolution` 不是必填项，但旧值会有弃用提示
+
+`moduleResolution` 本身不是 TypeScript 的必填配置项；如果省略，TypeScript 会根据 `module` 等配置选择默认的模块解析策略。
+
+不过当前项目配置了路径别名：
+
+```json
+"paths": {
+    "@root/*": ["./TypeScript/*"]
+}
+```
+
+因此实践上仍建议显式写 `moduleResolution`，避免 IDE 与命令行编译器出现不同的解析结果。
+
+另外，从 TypeScript 6.0 开始，`moduleResolution: "node10"` 会提示已弃用，并将在 TypeScript 7.0 停止工作。  
+这类提示的典型内容是：
+
+```text
+Option 'moduleResolution=node10' is deprecated and will stop functioning in TypeScript 7.0.
+Specify compilerOption '"ignoreDeprecations": "6.0"' to silence this error.
+```
+
+这里要区分两种处理方式：
+
+- `ignoreDeprecations` 只能压制提示，不是最终修复
+- 是否迁移到新的解析策略，要结合当前 TypeScript 版本和 `module` 配置一起判断
+
+当前仓库锁定的是 TypeScript `~5.3.3`，并且使用：
+
+```json
+"module": "commonjs",
+"moduleResolution": "node"
+```
+
+这是当前项目的实际可用配置。
+
+需要注意：
+
+- `bundler` 在 TypeScript `5.3.3` 下不能和 `module: "commonjs"` 搭配使用，否则会报 `TS5095`
+- 因此当前仓库不要为了消除 IDE 提示，直接把 `moduleResolution` 改成 `bundler`
+- 如果未来升级到更新版 TypeScript，并且同步调整 `module` 策略，再评估是否迁移到 `bundler` / `node16` / `nodenext`
+
+也就是说，在当前项目里，保持 `module: "commonjs"` + `moduleResolution: "node"`，并让 VS Code 使用工作区 TypeScript，是和现有工具链最兼容的方案
+
+如果你在 VS Code 里看到的提示和项目实际 `tspc` 编译结果不一致，优先检查 VS Code 是否用了内置的高版本 TypeScript，而不是工作区里的 `node_modules/typescript`。
+
+当前项目建议在工作区 [settings.json](/d:/UGit/NoOutsiders/.vscode/settings.json) 中配置：
+
+```json
+{
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "typescript.enablePromptUseWorkspaceTsdk": true
+}
+```
+
+然后在 VS Code 中执行：
+
+1. `Ctrl+Shift+P`
+2. 运行 `TypeScript: Select TypeScript Version`
+3. 选择 `Use Workspace Version`
+
+如果提示没有立刻刷新，再执行一次 `Developer: Reload Window`
+
+### 8.7 打包相关注意事项
+
+根据 Puerts Unreal FAQ，项目打包时至少要额外注意下面两点：
+
+1. `Content/JavaScript` 需要被显式打包进去
+
+Puerts 编译输出的 JavaScript 文件不是 Unreal 资产文件，默认不会像 `.uasset` 一样自动进入打包结果。  
+如果项目在手机或 PC 打包后出现“脚本不执行”或“找不到脚本”的问题，优先检查是否遗漏了这项配置。
+
+需要在 Unreal 编辑器中配置：
+
+- `项目设置 -> 打包 -> Additional Not-Asset Directories to Package`
+- 把 `Content/JavaScript` 加进去
+
+2. 注意 `FName` 大小写带来的打包差异
+
+Puerts FAQ 提到，编辑器环境和打包运行时对 `FName` 的字符串表现可能存在差异。  
+在编辑器里看起来正常的字段名、函数名或属性名，打包后可能因为大小写复用规则不同而表现成“字段找不到”。
+
+实践建议：
+
+- 蓝图字段名、函数名、属性名尽量统一大小写风格
+- 不要依赖仅大小写不同的命名来区分成员
+- 如果打包后出现字段访问异常，优先排查是否和 `FName` 大小写有关
+
+参考：
+
+- Puerts Unreal FAQ: https://puerts.github.io/docs/puerts/unreal/faq
 
 ## 9. 推荐工作流
 

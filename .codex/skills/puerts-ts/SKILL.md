@@ -19,11 +19,20 @@ Use this skill for the project's Puerts TypeScript layer. Keep the workflow cent
 
 - Keep TypeScript on `~5.3.3`. Do not upgrade to 5.4+ unless the user explicitly wants a migration.
 - Compile with `tspc`, not plain `tsc`.
-- Keep `compilerOptions.module` as `commonjs` and `sourceMap` enabled unless the user asks for a config change.
+- Keep `compilerOptions.module` as `commonjs`, `compilerOptions.moduleResolution` as `node`, and `sourceMap` enabled unless the user asks for a config change.
 - Keep path imports consistent with `tsconfig.json`: business code uses `@root/*`, while mixin dynamic registration may still use `@Root/...` entries inside `MixinDefine.ts`.
 - Check `Typing/ue/ue_bp.d.ts` before assuming Blueprint namespace paths.
 - Treat `Typing/ue/ue.d.ts` as the source of truth for UE runtime classes, methods, and delegates. If a UE type is already declared there, use it directly and do not re-declare it in business TS via local `type`, anonymous object shapes, or intersection overlays.
 - In project TypeScript, do not use leading underscores for private field names; prefer plain `camelCase` such as `displayIndex` or `bindRetryTimer`.
+- Respect the project's `strictNullChecks: false` setup. In this codebase it is acceptable for functions typed as returning a concrete UE/object type to return `null`, and callers may still perform `if (!value)` guards.
+
+## Code Writing Rules
+
+- Prefer small helper functions in shared libraries such as `TypeScript/Library/CommonLibrary.ts` when the same UE lookup logic is repeated across views/widgets.
+- In this project, do not add `| undefined` to every UE-returning helper by default. If the codebase convention for that helper is a concrete return type, it may still return `null` and let callers perform null checks.
+- When following the concrete-return-type convention in this repository, prefer plain `return null;` over noisy casts like `null as unknown as Foo` because `strictNullChecks` is disabled.
+- Keep business TS aligned with the generated UE typings. If a UE class, method, or delegate exists in `Typing/ue/ue.d.ts`, use that type directly instead of recreating local wrapper shapes.
+- Avoid editing generated `Content/JavaScript` output unless the user explicitly asks for generated JS changes.
 
 ## Mixin Rules
 
@@ -42,6 +51,7 @@ Use this skill for the project's Puerts TypeScript layer. Keep the workflow cent
 - Use `npm run build` or `npm run watch` before attaching the debugger.
 - Use the VS Code configuration `Attach Unreal Editor` and keep its port aligned with Puerts `DebugPort`.
 - Remember multi-process offsets: editor default `8080`, server `9079`, clients `8090`, `8100`, `8110`, and so on.
+- If VS Code diagnostics disagree with `tspc`, make sure VS Code is using the workspace TypeScript SDK from `node_modules/typescript/lib` instead of a newer bundled version.
 
 ## Read More
 
