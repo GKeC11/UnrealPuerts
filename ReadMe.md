@@ -94,6 +94,7 @@ node Plugins/Puerts/enable_puerts_module.js
 - 必须通过 `tspc` 编译，不能直接用 `tsc`
 - `sourceMap` 必须保持开启，否则 TS 断点无法回映到源码
 - 输出目录是 `Content/JavaScript`
+- `Content/JavaScript/**/*.js` 是 `TypeScript/` 的编译产物，默认不要直接手改；应修改 `TypeScript/` 源文件后重新编译
 - `moduleResolution` 不是必填项；不写时 TypeScript 会按 `module` 推导默认解析策略
 - 但当前项目使用了 `paths` 别名，实践上仍建议显式配置 `moduleResolution`，这样 IDE 和编译器行为更稳定一致
 
@@ -209,6 +210,14 @@ PuertsUtil.Mixin(TS_TargetClass, LobbyView);
 
 项目里优先统一使用 `PuertsUtil.LoadClass(...)` 获取蓝图类，而不是直接手写 `UE.Class.Load(...)` + `blueprint.tojs(...)`。  
 默认优先写“推导出来的 UE 类型路径”，不要因为当前 `ue_bp.d.ts` 里暂时没刷出来，就主动降级成通用类型或字符串路径。先把标准写法落进代码，后续由开发者补齐 typings。
+
+如果某个 BlueprintCallable / BlueprintFunctionLibrary 接口已经在 UE typings 里存在，例如：
+
+```typescript
+const classDiagnostics = UE.DMPuertsLibrary.DiagnoseBlueprintClassLoad(classObjectPath);
+```
+
+就直接按生成出来的 UE 类型调用，不要额外写 `(UE.DMPuertsLibrary as any)...` 这类降级写法。
 
 常见写法：
 

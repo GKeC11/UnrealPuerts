@@ -21,6 +21,7 @@ Use this skill for the project's Puerts TypeScript layer. Keep the workflow cent
 - Compile with `tspc`, not plain `tsc`.
 - Keep `compilerOptions.module` as `commonjs`, `compilerOptions.moduleResolution` as `node`, and `sourceMap` enabled unless the user asks for a config change.
 - Keep path imports consistent with `tsconfig.json`: business code uses `@root/*`, while mixin dynamic registration may still use `@Root/...` entries inside `MixinDefine.ts`.
+- Treat `Content/JavaScript/**/*.js` as generated output from `TypeScript/`. Do not hand-edit generated JS unless the user explicitly asks to change generated artifacts.
 - Check `Typing/ue/ue_bp.d.ts` before assuming Blueprint namespace paths.
 - Treat `Typing/ue/ue.d.ts` as the source of truth for UE runtime classes, methods, and delegates. If a UE type is already declared there, use it directly and do not re-declare it in business TS via local `type`, anonymous object shapes, or intersection overlays.
 - In project TypeScript, do not use leading underscores for private field names; prefer plain `camelCase` such as `displayIndex` or `bindRetryTimer`.
@@ -32,6 +33,7 @@ Use this skill for the project's Puerts TypeScript layer. Keep the workflow cent
 - In this project, do not add `| undefined` to every UE-returning helper by default. If the codebase convention for that helper is a concrete return type, it may still return `null` and let callers perform null checks.
 - When following the concrete-return-type convention in this repository, prefer plain `return null;` over noisy casts like `null as unknown as Foo` because `strictNullChecks` is disabled.
 - Keep business TS aligned with the generated UE typings. If a UE class, method, or delegate exists in `Typing/ue/ue.d.ts`, use that type directly instead of recreating local wrapper shapes.
+- If a Blueprint function library API is already present on `UE.*`, call it directly, for example `UE.DMPuertsLibrary.DiagnoseBlueprintClassLoad(path)`, and do not add `as any` just to bypass typings.
 - Avoid editing generated `Content/JavaScript` output unless the user explicitly asks for generated JS changes.
 
 ## Mixin Rules
