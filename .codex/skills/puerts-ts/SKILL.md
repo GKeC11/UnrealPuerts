@@ -35,6 +35,9 @@ Use this skill for the project's Puerts TypeScript layer. Keep the workflow cent
 - Keep business TS aligned with the generated UE typings. If a UE class, method, or delegate exists in `Typing/ue/ue.d.ts`, use that type directly instead of recreating local wrapper shapes.
 - If a Blueprint function library API is already present on `UE.*`, call it directly, for example `UE.DMPuertsLibrary.DiagnoseBlueprintClassLoad(path)`, and do not add `as any` just to bypass typings.
 - Avoid editing generated `Content/JavaScript` output unless the user explicitly asks for generated JS changes.
+- For UI/gameplay flow scripts, add targeted `LogUtil.Log(...)` calls at key transitions such as widget construct/destruct, delegate bind/unbind, validation failures, user actions, RPC dispatch, and major success/failure branches.
+- Keep log messages concise and searchable with a stable prefix like `Login View ...` or `Lobby View ...`.
+- Add short comments only when they explain sequencing, safety guards, or Unreal-specific intent that is not obvious from the code itself.
 
 ## Mixin Rules
 

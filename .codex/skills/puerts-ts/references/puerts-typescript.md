@@ -130,3 +130,32 @@ npx ts-patch install -s
 ```
 
 If that still fails, reinstall dependencies with `npm install`.
+
+## Logging and comments in UI scripts
+
+For Blueprint Mixins and UI flow scripts, logs should focus on the highest-value transitions:
+
+- `Construct` / `Destruct`
+- delegate bind / unbind
+- validation failures such as missing widgets, invalid controllers, invalid player state, or widget creation failures
+- user actions such as button clicks and confirmed input
+- major flow results such as RPC dispatch, widget open success, and widget removal success
+
+Guidelines:
+
+- Use `LogUtil.Log(...)`
+- Keep a stable searchable prefix such as `Login View ...` or `Lobby View ...`
+- Keep messages short and state-focused
+
+Comment guidelines:
+
+- Add short comments for sequencing, safety guards, or Unreal-specific intent
+- Skip comments for obvious null checks, simple property assignment, or trivial getter logic
+
+Example:
+
+```ts
+// 先更新本地显示名，再通知服务端同步 PlayerState 名称。
+playerState.PlayerNamePrivate = playerName;
+playerController.ServerChangeName(playerName);
+```
