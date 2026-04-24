@@ -106,19 +106,59 @@ Use `@root/...` in regular TypeScript imports. `@Root/...` will fail normal modu
 
 Do not guess Blueprint namespace paths from asset folders. Check `Typing/ue/ue_bp.d.ts` first.
 
+### Waiting for state changes
+
+Avoid implementing wait logic with TS timers such as `setTimeout` or `setInterval` just to poll for readiness.
+
+Prefer these patterns instead:
+
+- bind the relevant UE delegate and continue the flow from the callback
+- listen for a Gameplay Message when the state transition is already modeled as a channel/message
+- keep the delegate handle or message listener handle and unregister it as soon as the wait is fulfilled or the owner is being destroyed
+- if the needed event surface does not exist yet, add it in C++ first as a delegate, async action, or Gameplay Message path, then consume that from TS
+
+`Plugins/GameplayMessageRouter` is the reference for message-driven waits. Its `UGameplayMessageSubsystem` registers a typed listener per channel and returns a `FGameplayMessageListenerHandle` that must be explicitly unregistered.
+
+In this repository, the TS-facing Gameplay Message entry points already exist:
+
+- send: `UE.GameplayMessageSubsystem.Generic_BroadcastMessage(Channel, PayloadStruct.StaticStruct(), Payload)`
+- listen: `UE.AsyncAction_ListenForGameplayMessage.ListenForGameplayMessages(WorldContextObject, Channel, PayloadStruct.StaticStruct(), MatchType)`
+- receive callback: bind `OnMessageReceived`
+- read payload: call `GetPayload(...)` inside the receive callback with the matching struct type
+
+This means Puerts gameplay flow should prefer the existing generated `UE.*` APIs instead of adding ad-hoc polling timers or re-wrapping the C++ router unless a new missing capability is actually needed.
+
+When a missing capability is the blocker, the preferred order is:
+
+1. declare the native event source in C++ with the narrowest useful shape
+2. expose it through generated `UE.*`, a Puerts native registration, or an existing async-action pattern
+3. consume it from TS with clear bind/unbind ownership
+4. only consider a TS timer as a temporary fallback if adding the native event is not feasible for the task
+
+Use a TS timer only as a last-resort temporary workaround when there is truly no delegate or message source available and the user accepts that compromise.
+
 ### `K2_SetTimer`
 
 `K2_SetTimer` only works with reflected `UFunction` targets. It does not call plain TS methods reliably.
 
-Use:
+So for Puerts business logic, do not switch from TS timers to `K2_SetTimer` for waiting. The preferred replacement is event-driven flow via delegates or Gameplay Messages.
 
-```ts
-setTimeout(() => {
-    this.TryBindLobbyGameState();
-}, 100);
-```
+### Gameplay Message usage notes
 
-for pure TS callbacks.
+When using Gameplay Messages from TS:
+
+- prefer a strongly named payload struct type already generated in `Typing/ue/ue.d.ts`
+- keep the channel definition stable and centralized instead of constructing many ad-hoc strings inline
+- store the async listener object on the owner if the wait spans multiple frames
+- unbind or release the listener when the owner is destructed or the awaited state has been observed
+- add logs for listener register, message received, payload parse success/failure, and listener cleanup
+
+When adding native support for TS waits:
+
+- prefer adding a real delegate or Gameplay Message at the gameplay ownership layer instead of a view-local polling helper
+- expose only the minimal payload needed by TS
+- match the native API style already used by the project, for example `UFUNCTION(BlueprintCallable)` async actions or Puerts native registration for missing static helpers
+- keep cleanup explicit so listeners do not survive world teardown, widget destruction, or state completion
 
 ### `ts-patch` cache issues
 
@@ -137,6 +177,7 @@ For Blueprint Mixins and UI flow scripts, logs should focus on the highest-value
 
 - `Construct` / `Destruct`
 - delegate bind / unbind
+- message listener register / unregister
 - validation failures such as missing widgets, invalid controllers, invalid player state, or widget creation failures
 - user actions such as button clicks and confirmed input
 - major flow results such as RPC dispatch, widget open success, and widget removal success

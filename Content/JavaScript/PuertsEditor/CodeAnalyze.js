@@ -476,9 +476,6 @@ function watch(configFilePath) {
                         let moduleFileName = undefined;
                         let jsSource = undefined;
                         emitOutput.outputFiles.forEach(output => {
-                            if (doEmitJs) {
-                                UE.FileSystemOperation.WriteFile(output.name, output.text);
-                            }
                             if (output.name.endsWith(".js") || output.name.endsWith(".mjs")) {
                                 jsSource = output.text;
                                 if (options.outDir && output.name.startsWith(options.outDir)) {
@@ -488,11 +485,6 @@ function watch(configFilePath) {
                                 }
                             }
                         });
-                        if (moduleFileName && reload) {
-                            UE.FileSystemOperation.PuertsNotifyChange(moduleFileName, jsSource);
-                        }
-                        if (!doEmitBP)
-                            return;
                         let foundType = undefined;
                         let foundBaseTypeUClass = undefined;
                         ts.forEachChild(sourceFile, (node) => {
@@ -534,6 +526,18 @@ function watch(configFilePath) {
                                 }
                             }
                         });
+                        if (!foundBaseTypeUClass)
+                            return;
+                        emitOutput.outputFiles.forEach(output => {
+                            if (doEmitJs) {
+                                UE.FileSystemOperation.WriteFile(output.name, output.text);
+                            }
+                        });
+                        if (moduleFileName && reload) {
+                            UE.FileSystemOperation.PuertsNotifyChange(moduleFileName, jsSource);
+                        }
+                        if (!doEmitBP)
+                            return;
                         if (foundType && foundBaseTypeUClass) {
                             fileVersions[sourceFilePath].isBP = true;
                             //onBlueprintTypeAddOrChange(foundBaseTypeUClass, foundType, modulePath);
