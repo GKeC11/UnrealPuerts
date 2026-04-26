@@ -45,6 +45,7 @@ Use this skill for the project's Puerts TypeScript layer. Keep the workflow cent
 - If no suitable delegate or Gameplay Message exists yet, prefer declaring the event in C++/UE first and then exposing it to TS, instead of falling back to TS timer polling. Add the minimal native surface needed for an event-driven flow.
 - For UI/gameplay flow scripts, add targeted `LogUtil.Log(...)` calls at key transitions such as widget construct/destruct, delegate bind/unbind, validation failures, user actions, RPC dispatch, and major success/failure branches.
 - Keep log messages concise and searchable with a stable prefix like `Login View ...` or `Lobby View ...`.
+- Use Chinese for comments in Puerts TypeScript code unless matching an existing third-party or engine-facing English comment block.
 - Add short comments only when they explain sequencing, safety guards, or Unreal-specific intent that is not obvious from the code itself.
 
 ## Mixin Rules
