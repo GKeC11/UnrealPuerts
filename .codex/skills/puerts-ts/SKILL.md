@@ -11,14 +11,14 @@ Use this skill for the project's Puerts TypeScript layer. Keep the workflow cent
 
 1. Inspect the relevant TS source plus `package.json`, `tsconfig.json`, and `Plugins/Puerts/ReadMe.md` when build, debug, or mixin behavior matters.
 2. Edit TypeScript in `TypeScript/` or related typings/config files. Do not hand-edit generated JS by default.
-3. Compile with `npm run build` for one-shot validation or `npm run watch` for iterative work.
+3. Do not compile after ordinary `TypeScript/` edits by default. Run `npm run build` only when the user explicitly asks for generated output, a build/debug task requires it, or you need to validate a risky TS change.
 4. When the task involves Blueprint Mixins or Unreal runtime behavior, verify the target blueprint type in `Typing/ue/ue_bp.d.ts` and confirm the mixin path is registered in `TypeScript/Framework/Mixin/MixinDefine.ts`.
 5. When debugging is requested, use the existing VS Code attach flow and keep source maps enabled.
 
 ## Non-Negotiables
 
 - Keep TypeScript on `~5.3.3`. Do not upgrade to 5.4+ unless the user explicitly wants a migration.
-- Compile with `tspc`, not plain `tsc`.
+- When compilation is explicitly needed, compile with `tspc`, not plain `tsc`.
 - Keep `compilerOptions.module` as `commonjs`, `compilerOptions.moduleResolution` as `node`, and `sourceMap` enabled unless the user asks for a config change.
 - Keep path imports consistent with `tsconfig.json`: business code uses `@root/*`, while mixin dynamic registration may still use `@Root/...` entries inside `MixinDefine.ts`.
 - Treat `Content/JavaScript/**/*.js` as generated output from `TypeScript/`. Do not hand-edit generated JS unless the user explicitly asks to change generated artifacts.
@@ -36,7 +36,7 @@ Use this skill for the project's Puerts TypeScript layer. Keep the workflow cent
 - In this project, do not add `| undefined` to every UE-returning helper by default. If the codebase convention for that helper is a concrete return type, it may still return `null` and let callers perform null checks.
 - For UE lookup helpers in business TS, prefer signatures like `private GetLobbyPlayerController(): UE.NOLobbyPlayerController` instead of `UE.NOLobbyPlayerController | undefined` when the helper naturally models a concrete UE object lookup.
 - When following the concrete-return-type convention in this repository, prefer plain `return null;` over noisy casts like `null as unknown as Foo` because `strictNullChecks` is disabled.
-- Keep business TS aligned with the generated UE typings. If a UE class, method, or delegate exists in `Typing/ue/ue.d.ts`, use that type directly instead of recreating local wrapper shapes.
+- Keep business TS aligned with the generated UE typings when they are current. If the same turn changes C++ UFUNCTION/UPROPERTY/API surface that will be exposed to Puerts, business TS may call the new native API directly without waiting for regenerated typings.
 - If a Blueprint function library API is already present on `UE.*`, call it directly, for example `UE.DMPuertsLibrary.DiagnoseBlueprintClassLoad(path)`, and do not add `as any` just to bypass typings.
 - Avoid editing generated `Content/JavaScript` output unless the user explicitly asks for generated JS changes.
 - When code needs to wait for replication, initialization, async completion, or gameplay phase changes, listen for the owning delegate or message and advance the flow from that callback. Do not solve these waits with `setTimeout`, `setInterval`, or similar TS timer polling unless the user explicitly asks for a temporary workaround.
@@ -62,7 +62,7 @@ Use this skill for the project's Puerts TypeScript layer. Keep the workflow cent
 
 ## Debugging Rules
 
-- Use `npm run build` or `npm run watch` before attaching the debugger.
+- Use `npm run build` or `npm run watch` before attaching the debugger only when the current debug task needs freshly generated JavaScript.
 - Use the VS Code configuration `Attach Unreal Editor` and keep its port aligned with Puerts `DebugPort`.
 - Remember multi-process offsets: editor default `8080`, server `9079`, clients `8090`, `8100`, `8110`, and so on.
 - If VS Code diagnostics disagree with `tspc`, make sure VS Code is using the workspace TypeScript SDK from `node_modules/typescript/lib` instead of a newer bundled version.
